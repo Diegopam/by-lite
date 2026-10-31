@@ -1,0 +1,242 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:root {
+  --bg-color: #12141d;
+  --surface-color: #1a1d28;
+  --surface-active: #242838;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --accent-color: #ff9f0a;
+  --accent-hover: #ffb340;
+  --text-main: #ffffff;
+  --text-dim: #8e95a5;
+  --fn-bg: #2a2e3d;
+  --fn-hover: #363b4e;
+  --close-hover: #e0443e;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+/* Custom CSD Titlebar */
+.titlebar {
+  height: 38px;
+  background: rgba(18, 20, 29, 0.9);
+  backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: grab;
+}
+
+.titlebar:active {
+  cursor: grabbing;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.app-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.app-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.win-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.win-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+}
+
+.win-btn.close:hover {
+  background: var(--close-hover);
+  color: white;
+}
+
+/* Calculator Main Area */
+.calculator {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 16px;
+}
+
+.display {
+  background: rgba(26, 29, 40, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  min-height: 110px;
+  position: relative;
+}
+
+.engine-badge {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #10b981;
+  font-weight: 500;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.engine-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+.history {
+  font-size: 14px;
+  color: var(--text-dim);
+  min-height: 20px;
+  word-break: break-all;
+}
+
+.current {
+  font-size: 42px;
+  font-weight: 300;
+  letter-spacing: -0.5px;
+  color: var(--text-main);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Keypad Grid */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  flex: 1;
+}
+
+.btn {
+  border: none;
+  border-radius: 12px;
+  font-size: 20px;
+  font-weight: 400;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease-in-out;
+  outline: none;
+}
+
+.btn:active {
+  transform: scale(0.95);
+}
+
+.btn.num {
+  background: var(--surface-color);
+  color: var(--text-main);
+}
+
+.btn.num:hover {
+  background: var(--surface-active);
+}
+
+.btn.fn {
+  background: var(--fn-bg);
+  color: #d1d5db;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.btn.fn:hover {
+  background: var(--fn-hover);
+}
+
+.btn.op {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  font-size: 24px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.btn.op:hover {
+  background: rgba(99, 102, 241, 0.32);
+}
+
+.btn.equals {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  font-size: 24px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.btn.equals:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.6);
+}
+
+.btn.zero {
+  grid-column: span 2;
+  justify-content: flex-start;
+  padding-left: 28px;
+}

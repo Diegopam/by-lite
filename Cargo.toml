@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "crates/by-lite-sys",
+    "crates/by-lite-core",
+    "crates/by-lite-cli",
+    "examples/calculator",
+]
+resolver = "2"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,15 @@
+[package]
+name = "by-lite-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI runner and launcher for by-lite desktop applications"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "by-lite"
+path = "src/main.rs"
+
+[dependencies]
+by-lite-core = { path = "../by-lite-core" }
+libc = "0.2"
+serde_json = "1.0"

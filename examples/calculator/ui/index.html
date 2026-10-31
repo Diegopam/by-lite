@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Custom CSD Titlebar -->
+  <header class="titlebar" data-by-drag>
+    <div class="titlebar-left" data-by-no-drag>
+      <div class="app-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="2" width="16" height="20" rx="3"></rect>
+          <line x1="8" y1="6" x2="16" y2="6"></line>
+          <line x1="16" y1="14" x2="16" y2="18"></line>
+          <line x1="8" y1="14" x2="8" y2="14.01"></line>
+          <line x1="12" y1="14" x2="12" y2="14.01"></line>
+          <line x1="8" y1="18" x2="8" y2="18.01"></line>
+          <line x1="12" y1="18" x2="12" y2="18.01"></line>
+        </svg>
+      </div>
+      <span class="app-title">Calculator</span>
+    </div>
+
+    <!-- Interactive Window Control Buttons -->
+    <div class="window-controls" data-by-no-drag>
+      <button class="win-btn minimize" data-by-action="minimize" title="Minimize">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <line x1="1" y1="5" x2="9" y2="5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="win-btn maximize" data-by-action="toggle-maximize" title="Maximize">
+        <svg class="icon-max" width="10" height="10" viewBox="0 0 10 10">
+          <rect x="1.5" y="1.5" width="7" height="7" stroke="currentColor" stroke-width="1.2" fill="none" rx="1"/>
+        </svg>
+      </button>
+      <button class="win-btn close" data-by-action="close" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Calculator Container -->
+  <main class="calculator">
+    <!-- Display Section -->
+    <div class="display">
+      <div class="engine-badge" id="engine-badge">
+        <span class="dot"></span>
+        <span id="engine-label">Rust IPC Active</span>
+      </div>
+      <div class="history" id="history"></div>
+      <div class="current" id="display">0</div>
+    </div>
+
+    <!-- Keypad Section -->
+    <div class="keypad">
+      <button class="btn fn" data-action="clear">AC</button>
+      <button class="btn fn" data-action="negate">±</button>
+      <button class="btn fn" data-action="percent">%</button>
+      <button class="btn op" data-op="/">÷</button>
+
+      <button class="btn num" data-num="7">7</button>
+      <button class="btn num" data-num="8">8</button>
+      <button class="btn num" data-num="9">9</button>
+      <button class="btn op" data-op="*">×</button>
+
+      <button class="btn num" data-num="4">4</button>
+      <button class="btn num" data-num="5">5</button>
+      <button class="btn num" data-num="6">6</button>
+      <button class="btn op" data-op="-">−</button>
+
+      <button class="btn num" data-num="1">1</button>
+      <button class="btn num" data-num="2">2</button>
+      <button class="btn num" data-num="3">3</button>
+      <button class="btn op" data-op="+">+</button>
+
+      <button class="btn num zero" data-num="0">0</button>
+      <button class="btn num" data-num=".">.</button>
+      <button class="btn equals" data-action="calculate">=</button>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

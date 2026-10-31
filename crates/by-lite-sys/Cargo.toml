@@ -1,0 +1,10 @@
+[package]
+name = "by-lite-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Low-level FFI bindings to WPE WebKit 2.0, WPE Platform 2.0, and GLib"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+
+[build-dependencies]
