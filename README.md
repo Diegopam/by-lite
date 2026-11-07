@@ -58,7 +58,25 @@ O motor do by-lite evoluiu significativamente, tornando-se uma solucao robusta p
 
 ## Instalacao do Runtime
 
-### Instalador Universal
+### 1. Instalacao do Runtime Portatil Hermetico (Recomendado para Zorin OS, Ubuntu e Debian)
+
+Como distribuicoes como o **Zorin OS 18** e **Ubuntu 24.04** nao possuem o `wpewebkit-2.0` empacotado em seus repositorios oficiais APT, o by-lite fornece um pacote portatil autonomo que ja embute o motor WPE WebKit 2.0 LTS compilado contra a glibc compativel, sem depender de pacotes externos do sistema.
+
+Para instalar em qualquer distribuicao com um unico comando (sem precisar de compilador nem sudo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Diegopam/by-lite/main/scripts/install-portable.sh | bash
+```
+
+O script automaticamente:
+- Baixa o motor oficial WPE WebKit 2.0 e o binario `by-lite` compilado em container isolado.
+- Extrai em `~/.local/share/by-lite/` com bibliotecas configuradas via `RPATH`.
+- Cria o symlink universal em `~/.local/bin/by-lite`.
+- Registra as associacoes de arquivo `.byt` no sistema para duplo clique no Dolphin e Nautilus.
+
+---
+
+### 2. Instalador Universal para Distros com WPE 2.0 Nativo (Arch, Fedora, openSUSE)
 
 O script de instalacao detecta automaticamente a sua distribuicao Linux, instala as dependencias de sistema necessarias, compila/instala o executavel do `by-lite` e registra as associacoes MIME para abertura com duplo clique.
 

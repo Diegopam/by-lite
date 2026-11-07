@@ -1,0 +1,45 @@
+name: Build Portable Runtime Bundle
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-portable:
+    name: Build Hermetic WPE WebKit 2.0 Bundle
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Portable Runtime Container
+        run: |
+          docker build -t by-lite-builder -f scripts/Dockerfile.portable-builder .
+          mkdir -p dist
+          CONTAINER_ID=$(docker create by-lite-builder)
+          docker cp "${CONTAINER_ID}:/dist/by-lite-portable-linux-x86_64.tar.gz" dist/by-lite-portable-linux-x86_64.tar.gz
+          docker rm "${CONTAINER_ID}"
+          ls -lh dist/by-lite-portable-linux-x86_64.tar.gz
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: by-lite-portable-linux-x86_64
+          path: dist/by-lite-portable-linux-x86_64.tar.gz
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/by-lite-portable-linux-x86_64.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
