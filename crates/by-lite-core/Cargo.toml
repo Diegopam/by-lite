@@ -1,6 +1,6 @@
 [package]
 name = "by-lite-core"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "High-level, safe, ergonomic Rust runtime API for by-lite wrapping WPE WebKit 2.0"
 license = "MIT OR Apache-2.0"

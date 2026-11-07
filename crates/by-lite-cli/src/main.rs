@@ -14,17 +14,26 @@ USAGE:
     by-lite [OPTIONS] [PATH_OR_URL_OR_BYT]
     by-lite run [OPTIONS] <PATH_OR_URL_OR_BYT>
     by-lite pack <DIRECTORY> [-o <OUTPUT.byt>]
+    by-lite integrate <PATH_TO_BYT>
+    by-lite unintegrate <NAME_OR_BYT>
+    by-lite integrate-all [DIRECTORY]
+    by-lite list-integrated
     by-lite install-mime
 
 COMMANDS:
     run <TARGET>           Run an application (.byt package, HTML file, directory, or URL)
     pack <DIR> [-o OUT]    Package an application directory into a compressed .byt bundle
+    integrate <BYT>        Integrate .byt app with icon into system application menu (.desktop)
+    unintegrate <NAME>     Remove .byt application from system menu
+    integrate-all [DIR]    Integrate all .byt bundles in directory into system menu
+    list-integrated        List all .byt apps currently integrated in the desktop menu
     install-mime           Register .byt MIME type and .desktop file for double-click launch
 
 ARGUMENTS:
     <PATH_OR_URL_OR_BYT>   Path to .byt bundle, HTML file, directory with index.html, or URL
 
 OPTIONS:
+    --fixed-menu           Integrate application into desktop menu before launching
     -t, --title <TITLE>    Window title override
     -w, --width <WIDTH>    Initial window width
     -H, --height <HEIGHT>  Initial window height
@@ -68,6 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut height_override: Option<u32> = None;
     let mut devtools = true;
     let mut csd = true;
+    let mut fixed_menu = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -86,8 +96,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "run" => {
                 command = Some("run".into());
             }
+            "integrate" | "install-desktop" | "add-menu" => {
+                command = Some("integrate".into());
+            }
+            "unintegrate" | "remove-desktop" | "remove-menu" => {
+                command = Some("unintegrate".into());
+            }
+            "integrate-all" => {
+                command = Some("integrate-all".into());
+            }
+            "list-integrated" => {
+                command = Some("list-integrated".into());
+            }
             "install-mime" => {
                 command = Some("install-mime".into());
+            }
+            "--fixed-menu" | "-fixed-menu" | "--integrate" => {
+                fixed_menu = true;
             }
             "-o" | "--output" => {
                 if i + 1 < args.len() {
@@ -173,9 +198,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         }
         Some("install-mime") => install_mime_types(),
+        Some("integrate") => {
+            let target_byt = target.ok_or("Uso: by-lite integrate <pacote.byt>")?;
+            integrate_byt(&target_byt)
+        }
+        Some("unintegrate") => {
+            let target_byt = target.ok_or("Uso: by-lite unintegrate <nome_ou_pacote.byt>")?;
+            unintegrate_byt(&target_byt)
+        }
+        Some("integrate-all") => {
+            let dir = target.unwrap_or_else(|| ".".into());
+            integrate_all_byt(&dir)
+        }
+        Some("list-integrated") => list_integrated_apps(),
         _ => {
             // Default to running target or welcome page
             if let Some(target_str) = target {
+                if fixed_menu {
+                    let _ = integrate_byt(&target_str);
+                }
                 run_target(
                     &target_str,
                     title_override,
@@ -214,6 +255,25 @@ fn run_target(
     if clean_target.ends_with(".byt") || (target_path.is_file() && is_tar_gz(target_path)) {
         return run_byt_package(
             target_path,
+            title_override,
+            app_id,
+            width_override,
+            height_override,
+            devtools,
+            csd,
+        );
+    }
+
+    // Detect if target is an app directory with by-lite.json
+    if target_path.is_dir() && target_path.join("by-lite.json").exists() {
+        let manifest = package::ByManifest::from_file(&target_path.join("by-lite.json"))?;
+        println!(
+            "[by-lite] Executando diretório de aplicativo '{}' (v{}) em {:?}",
+            manifest.name, manifest.version, target_path
+        );
+        return run_app_instance(
+            target_path,
+            manifest,
             title_override,
             app_id,
             width_override,
@@ -264,6 +324,52 @@ fn run_byt_package(
         "[by-lite] Aplicativo '{}' (v{}) carregado em {:?}",
         manifest.name, manifest.version, app_dir
     );
+
+    run_app_instance(
+        &app_dir,
+        manifest,
+        title_override,
+        app_id_override,
+        width_override,
+        height_override,
+        devtools_override,
+        csd_override,
+    )
+}
+
+fn run_app_instance(
+    app_dir: &Path,
+    manifest: package::ByManifest,
+    title_override: Option<String>,
+    app_id_override: Option<String>,
+    width_override: Option<u32>,
+    height_override: Option<u32>,
+    devtools_override: bool,
+    csd_override: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Check if application requires embedded network tunnel (e.g. Cloudflare WARP) or proxy
+    if manifest.tunnel.as_deref() == Some("warp") || manifest.proxy.is_some() {
+        println!("[by-lite] 🛡️ Ativando túnel de rede embutido (Cloudflare WARP)...");
+        let warp_cmd = if app_dir.join("bin/by-lite-warp").exists() {
+            app_dir.join("bin/by-lite-warp")
+        } else {
+            PathBuf::from("by-lite-warp")
+        };
+        let _ = Command::new(warp_cmd).arg("ensure").status();
+        let proxy_target = manifest
+            .proxy
+            .clone()
+            .unwrap_or_else(|| "http://127.0.0.1:40001".to_string());
+        std::env::set_var("http_proxy", &proxy_target);
+        std::env::set_var("https_proxy", &proxy_target);
+        std::env::set_var("HTTP_PROXY", &proxy_target);
+        std::env::set_var("HTTPS_PROXY", &proxy_target);
+        std::env::set_var("all_proxy", "socks5://127.0.0.1:40000");
+        std::env::set_var("ALL_PROXY", "socks5://127.0.0.1:40000");
+        std::env::set_var("no_proxy", "localhost,127.0.0.1,::1");
+        std::env::set_var("NO_PROXY", "localhost,127.0.0.1,::1");
+        println!("[by-lite] 🌐 Tráfego do aplicativo encapsulado com sucesso via {}", proxy_target);
+    }
 
     // Check and start optional backend process
     let mut _backend_guard = BackendGuard { child: None };
@@ -317,19 +423,25 @@ fn run_byt_package(
     }
 
     // Resolve entrypoint URL
-    let entry_path = app_dir.join(&manifest.entrypoint);
-    if !entry_path.exists() {
-        return Err(format!(
-            "Ponto de entrada '{}' não encontrado em {:?}",
-            manifest.entrypoint, app_dir
-        )
-        .into());
-    }
-
-    let url = if let Ok(canonical) = fs::canonicalize(&entry_path) {
-        format!("file://{}", canonical.display())
+    let url = if manifest.entrypoint.starts_with("http://")
+        || manifest.entrypoint.starts_with("https://")
+    {
+        manifest.entrypoint.clone()
     } else {
-        format!("file://{}", entry_path.display())
+        let entry_path = app_dir.join(&manifest.entrypoint);
+        if !entry_path.exists() {
+            return Err(format!(
+                "Ponto de entrada '{}' não encontrado em {:?}",
+                manifest.entrypoint, app_dir
+            )
+            .into());
+        }
+
+        if let Ok(canonical) = fs::canonicalize(&entry_path) {
+            format!("file://{}", canonical.display())
+        } else {
+            format!("file://{}", entry_path.display())
+        }
     };
 
     let title = title_override.unwrap_or(manifest.title);
@@ -339,6 +451,9 @@ fn run_byt_package(
     let resizable = manifest.resizable;
     let csd = csd_override && manifest.csd;
     let devtools = devtools_override && manifest.devtools;
+    let adblock = manifest.adblock;
+    let autoplay_helper = manifest.autoplay_helper;
+    let sdk = manifest.sdk;
 
     let app = App::new()?;
     let mut builder = WindowBuilder::new()
@@ -347,7 +462,10 @@ fn run_byt_package(
         .size(width, height)
         .resizable(resizable)
         .csd(csd)
+        .sdk(sdk)
         .devtools(devtools)
+        .adblock(adblock)
+        .autoplay_helper(autoplay_helper)
         .url(url);
 
     builder = register_default_commands(builder);
@@ -372,15 +490,133 @@ fn is_tar_gz(path: &Path) -> bool {
 }
 
 fn register_default_commands(builder: WindowBuilder) -> WindowBuilder {
-    builder.command("system_info", |_| {
-        Ok(serde_json::json!({
-            "runtime": "by-lite",
-            "version": VERSION,
-            "engine": "WPE WebKit 2.0 (wpe-platform-wayland)",
-            "os": "Linux (Wayland)",
-            "pid": std::process::id(),
-        }))
-    })
+    builder
+        .command("system_info", |_| {
+            Ok(serde_json::json!({
+                "runtime": "by-lite",
+                "version": VERSION,
+                "engine": "WPE WebKit 2.0 (wpe-platform-wayland)",
+                "os": "Linux (Wayland)",
+                "pid": std::process::id(),
+                "sdk": "macOS UI Toolkit v1.0.0",
+            }))
+        })
+        .command("miniui.protocol", |args| {
+            let payload_str = args
+                .as_ref()
+                .and_then(|v| v.get("payload"))
+                .and_then(|p| p.as_str())
+                .unwrap_or("{}");
+            let req: serde_json::Value = serde_json::from_str(payload_str).unwrap_or_default();
+            let v = req.get("v").and_then(|x| x.as_u64()).unwrap_or(1);
+            let id = req.get("id").cloned().unwrap_or(serde_json::Value::Null);
+            let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
+            let params = req.get("params").cloned().unwrap_or(serde_json::json!({}));
+
+            match method {
+                "runtime.handshake" => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": {
+                        "protocol": 1,
+                        "name": "by-lite",
+                        "version": VERSION,
+                        "capabilities": [
+                            "runtime.info",
+                            "runtime.capabilities",
+                            "windows.minimize",
+                            "windows.maximize",
+                            "windows.restore",
+                            "windows.close",
+                            "windows.setTitle",
+                            "windows.setFullscreen",
+                            "windows.getState",
+                            "system.info",
+                            "system.getTheme",
+                            "system.getLocale",
+                            "filesystem.list",
+                            "filesystem.readText"
+                        ],
+                        "permissions": {
+                            "filesystem": "granted",
+                            "clipboard": "granted",
+                            "notifications": "granted"
+                        }
+                    }
+                })),
+                "runtime.info" | "system.info" => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": {
+                        "name": "by-lite",
+                        "version": VERSION,
+                        "protocol": 1,
+                        "os": "Linux (Wayland)",
+                        "engine": "WPE WebKit 2.0",
+                        "pid": std::process::id()
+                    }
+                })),
+                "system.getTheme" => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": "light"
+                })),
+                "system.getLocale" => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": "pt-BR"
+                })),
+                "filesystem.list" => {
+                    let path_str = params.get("path").and_then(|p| p.as_str()).unwrap_or("/");
+                    let mut entries = Vec::new();
+                    if let Ok(rd) = fs::read_dir(path_str) {
+                        for entry in rd.flatten().take(200) {
+                            let name = entry.file_name().to_string_lossy().to_string();
+                            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+                            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                            entries.push(serde_json::json!({
+                                "name": name,
+                                "kind": if is_dir { "dir" } else { "file" },
+                                "size": size
+                            }));
+                        }
+                    }
+                    Ok(serde_json::json!({
+                        "v": v,
+                        "id": id,
+                        "ok": true,
+                        "result": entries
+                    }))
+                }
+                "filesystem.readText" => {
+                    let path_str = params.get("path").and_then(|p| p.as_str()).unwrap_or("");
+                    match fs::read_to_string(path_str) {
+                        Ok(text) => Ok(serde_json::json!({
+                            "v": v,
+                            "id": id,
+                            "ok": true,
+                            "result": text
+                        })),
+                        Err(e) => Ok(serde_json::json!({
+                            "v": v,
+                            "id": id,
+                            "ok": false,
+                            "error": { "code": "E_IO", "message": e.to_string() }
+                        })),
+                    }
+                }
+                _ => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": { "handled": true, "method": method }
+                })),
+            }
+        })
 }
 
 fn install_mime_types() -> Result<(), Box<dyn std::error::Error>> {
@@ -501,6 +737,203 @@ fn ensure_mimeapps_entry(mimeapps_path: &Path) {
         }
         let _ = fs::write(mimeapps_path, content);
     }
+}
+
+pub fn integrate_byt(target_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let clean_path = target_str.strip_prefix("file://").unwrap_or(target_str);
+    let path = Path::new(clean_path);
+    if !path.exists() {
+        return Err(format!("Arquivo ou diretório não encontrado: {:?}", path).into());
+    }
+
+    let abs_path = fs::canonicalize(path)?;
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let data_home = env::var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(&home).join(".local/share"));
+
+    let apps_dir = data_home.join("applications");
+    let icons_dir = data_home.join("icons/hicolor/256x256/apps");
+    let by_icons_dir = apps_dir.join("by-lite-icons");
+
+    fs::create_dir_all(&apps_dir)?;
+    fs::create_dir_all(&icons_dir)?;
+    fs::create_dir_all(&by_icons_dir)?;
+
+    let is_dir = abs_path.is_dir();
+    let (app_dir, manifest) = if is_dir && abs_path.join("by-lite.json").exists() {
+        let m = package::ByManifest::from_file(&abs_path.join("by-lite.json"))?;
+        (abs_path.clone(), m)
+    } else {
+        println!("[by-lite integrate] Inspecionando pacote .byt: {:?}", abs_path);
+        package::unpack(&abs_path, None)?
+    };
+
+    let app_id = manifest.name.clone();
+    let title = manifest.title.clone();
+    let comment = manifest.resolve_comment();
+    let categories = manifest.resolve_categories();
+
+    // Extrair e instalar ícone
+    let mut final_icon_spec = app_id.clone();
+    if let Some(icon_path) = manifest.resolve_icon(&app_dir) {
+        let ext = icon_path.extension().and_then(|e| e.to_str()).unwrap_or("png");
+        let dest_icon_hicolor = icons_dir.join(format!("{}.{}", app_id, ext));
+        let dest_icon_local = by_icons_dir.join(format!("{}.{}", app_id, ext));
+
+        let _ = fs::copy(&icon_path, &dest_icon_hicolor);
+        let _ = fs::copy(&icon_path, &dest_icon_local);
+        println!("[by-lite integrate] 🎨 Ícone instalado em: {:?}", dest_icon_hicolor);
+        final_icon_spec = dest_icon_local.to_string_lossy().to_string();
+    } else {
+        println!("[by-lite integrate] ℹ️ Nenhum ícone customizado encontrado. Usando tema padrão.");
+    }
+
+    // Gerar lançador FreeDesktop .desktop
+    let desktop_content = format!(
+r#"[Desktop Entry]
+Version=1.0
+Type=Application
+Name={title}
+GenericName={app_id}
+Comment={comment}
+Exec=by-lite run "{exec_path}" %U
+Icon={icon}
+Terminal=false
+StartupWMClass={app_id}
+Categories={categories}
+MimeType=application/x-by-lite;
+Keywords=by-lite;streaming;tv;video;player;
+"#,
+        title = title,
+        app_id = app_id,
+        comment = comment,
+        exec_path = abs_path.display(),
+        icon = final_icon_spec,
+        categories = categories,
+    );
+
+    let desktop_file = apps_dir.join(format!("{}.desktop", app_id));
+    fs::write(&desktop_file, desktop_content)?;
+    println!("[by-lite integrate] 📌 Lançador Desktop gerado: {:?}", desktop_file);
+
+    // Atualizar caches dos ambientes desktop
+    let _ = Command::new("update-desktop-database").arg(&apps_dir).status();
+    let _ = Command::new("kbuildsycoca6").status();
+    let _ = Command::new("kbuildsycoca5").status();
+
+    println!("[by-lite] ✅ Aplicativo '{}' integrado com sucesso no menu do sistema!", title);
+    Ok(())
+}
+
+pub fn unintegrate_byt(target_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let clean = target_str.strip_prefix("file://").unwrap_or(target_str);
+    let stem = if clean.ends_with(".byt") {
+        Path::new(clean).file_stem().and_then(|s| s.to_str()).unwrap_or(clean)
+    } else if clean.ends_with(".desktop") {
+        clean.strip_suffix(".desktop").unwrap_or(clean)
+    } else {
+        clean
+    };
+
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let data_home = env::var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(&home).join(".local/share"));
+
+    let apps_dir = data_home.join("applications");
+    let desktop_file = apps_dir.join(format!("{}.desktop", stem));
+    if desktop_file.exists() {
+        let _ = fs::remove_file(&desktop_file);
+        println!("[by-lite unintegrate] 🗑️ Lançador removido: {:?}", desktop_file);
+    } else {
+        println!("[by-lite unintegrate] ⚠️ Lançador não encontrado para: {}", stem);
+    }
+
+    let icon_file = data_home.join("icons/hicolor/256x256/apps").join(format!("{}.png", stem));
+    if icon_file.exists() {
+        let _ = fs::remove_file(&icon_file);
+    }
+    let local_icon = apps_dir.join("by-lite-icons").join(format!("{}.png", stem));
+    if local_icon.exists() {
+        let _ = fs::remove_file(&local_icon);
+    }
+
+    let _ = Command::new("update-desktop-database").arg(&apps_dir).status();
+    let _ = Command::new("kbuildsycoca6").status();
+    let _ = Command::new("kbuildsycoca5").status();
+
+    println!("[by-lite] 🧹 Aplicativo '{}' removido do menu do sistema.", stem);
+    Ok(())
+}
+
+pub fn integrate_all_byt(dir_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let path = Path::new(dir_str);
+    if !path.exists() || !path.is_dir() {
+        return Err(format!("Diretório inválido ou inexistente: {:?}", path).into());
+    }
+
+    println!("[by-lite] 🔍 Escaneando diretório por pacotes .byt: {:?}", path);
+    let mut count = 0;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let p = entry.path();
+        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("byt") {
+            println!("\n--- Integrando: {:?} ---", p.file_name().unwrap_or_default());
+            if let Err(e) = integrate_byt(&p.to_string_lossy()) {
+                eprintln!("[by-lite] Erro ao integrar {:?}: {}", p, e);
+            } else {
+                count += 1;
+            }
+        }
+    }
+    println!("\n[by-lite] 🎉 Total de {} aplicativo(s) .byt integrados com sucesso no menu!", count);
+    Ok(())
+}
+
+pub fn list_integrated_apps() -> Result<(), Box<dyn std::error::Error>> {
+    let home = env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    let data_home = env::var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(&home).join(".local/share"));
+    let apps_dir = data_home.join("applications");
+
+    println!("[by-lite] 📋 Aplicativos .byt integrados em {:?}:\n", apps_dir);
+    let mut count = 0;
+    if apps_dir.is_dir() {
+        for entry in fs::read_dir(&apps_dir)? {
+            let entry = entry?;
+            let p = entry.path();
+            if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("desktop") {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if content.contains("application/x-by-lite") || content.contains("by-lite") {
+                        let name = content.lines()
+                            .find(|l| l.starts_with("Name="))
+                            .and_then(|l| l.strip_prefix("Name="))
+                            .unwrap_or("Desconhecido");
+                        let icon = content.lines()
+                            .find(|l| l.starts_with("Icon="))
+                            .and_then(|l| l.strip_prefix("Icon="))
+                            .unwrap_or("");
+                        let exec = content.lines()
+                            .find(|l| l.starts_with("Exec="))
+                            .and_then(|l| l.strip_prefix("Exec="))
+                            .unwrap_or("");
+                        println!(" • \x1b[1m{}\x1b[0m [{:?}]", name, p.file_name().unwrap_or_default());
+                        println!("   Exec: {}", exec);
+                        println!("   Icon: {}\n", icon);
+                        count += 1;
+                    }
+                }
+            }
+        }
+    }
+    if count == 0 {
+        println!("  Nenhum aplicativo .byt integrado encontrado.");
+    } else {
+        println!("Total: {} aplicativo(s) integrado(s).", count);
+    }
+    Ok(())
 }
 
 fn run_welcome_page() -> Result<(), Box<dyn std::error::Error>> {

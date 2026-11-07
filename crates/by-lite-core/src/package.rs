@@ -49,7 +49,23 @@ pub struct ByManifest {
     #[serde(default = "default_entrypoint")]
     pub entrypoint: String,
     #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub categories: Option<String>,
+    #[serde(default)]
+    pub comment: Option<String>,
+    #[serde(default)]
     pub backend: Option<BackendSpec>,
+    #[serde(default)]
+    pub tunnel: Option<String>,
+    #[serde(default)]
+    pub proxy: Option<String>,
+    #[serde(default)]
+    pub adblock: bool,
+    #[serde(default)]
+    pub autoplay_helper: bool,
+    #[serde(default = "default_true")]
+    pub sdk: bool,
 }
 
 fn default_title() -> String {
@@ -130,8 +146,69 @@ impl ByManifest {
             csd: true,
             devtools: true,
             entrypoint,
+            icon: None,
+            categories: None,
+            comment: None,
             backend: None,
+            tunnel: None,
+            proxy: None,
+            adblock: false,
+            autoplay_helper: false,
+            sdk: true,
         }
+    }
+
+    /// Resolve application icon path from directory (explicit in manifest or auto-detected)
+    pub fn resolve_icon(&self, app_dir: &Path) -> Option<PathBuf> {
+        if let Some(ref icon_rel) = self.icon {
+            let p = app_dir.join(icon_rel);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        let candidates = [
+            "ui/assets/icon.png",
+            "assets/icon.png",
+            "icon.png",
+            "ui/icon.png",
+            "ui/assets/icon.svg",
+            "assets/icon.svg",
+            "icon.svg",
+            "assets/icon.icns",
+            "ui/assets/icon.icns",
+        ];
+        for cand in candidates {
+            let p = app_dir.join(cand);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    /// Resolve categories for FreeDesktop .desktop generation
+    pub fn resolve_categories(&self) -> String {
+        if let Some(ref cat) = self.categories {
+            if !cat.trim().is_empty() {
+                let trimmed = cat.trim();
+                if trimmed.ends_with(';') {
+                    return trimmed.to_string();
+                } else {
+                    return format!("{};", trimmed);
+                }
+            }
+        }
+        "AudioVideo;Video;Player;Network;".to_string()
+    }
+
+    /// Resolve comment / description for FreeDesktop .desktop generation
+    pub fn resolve_comment(&self) -> String {
+        if let Some(ref c) = self.comment {
+            if !c.trim().is_empty() {
+                return c.trim().to_string();
+            }
+        }
+        format!("{} — aplicativo desktop by-lite", self.title)
     }
 }
 

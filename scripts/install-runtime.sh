@@ -31,7 +31,7 @@ fi
 # 1. Install dependencies if needed and permitted
 echo "[by-lite] Verificando dependências do sistema..."
 case "$DISTRO" in
-    arch|manjaro|endeavouros|garuda)
+    arch|manjaro|endeavouros|garuda|cachyos)
         if ! pacman -Q wpewebkit >/dev/null 2>&1; then
             if [ "$CAN_SUDO" = true ]; then
                 echo "[by-lite] Instalando wpewebkit e bibliotecas essenciais..."
@@ -43,7 +43,7 @@ case "$DISTRO" in
             echo "[by-lite] Pacote wpewebkit já instalado."
         fi
         ;;
-    ubuntu|debian|pop|linuxmint|elementary|zorin)
+    ubuntu|debian|pop|linuxmint|elementary|zorin|zorinos|tuxedo|neon)
         if ! dpkg -s libwpewebkit-2.0-1 >/dev/null 2>&1; then
             if [ "$CAN_SUDO" = true ]; then
                 sudo apt-get update -y

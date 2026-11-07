@@ -88,6 +88,18 @@ extern "C" {
     pub fn webkit_settings_set_allow_file_access_from_file_urls(settings: *mut WebKitSettings, allowed: gboolean);
     pub fn webkit_settings_set_allow_universal_access_from_file_urls(settings: *mut WebKitSettings, allowed: gboolean);
     pub fn webkit_settings_set_javascript_can_access_clipboard(settings: *mut WebKitSettings, allowed: gboolean);
+    pub fn webkit_settings_set_media_playback_requires_user_gesture(settings: *mut WebKitSettings, requires: gboolean);
+    pub fn webkit_settings_set_enable_encrypted_media(settings: *mut WebKitSettings, enabled: gboolean);
+    pub fn webkit_settings_set_enable_mediasource(settings: *mut WebKitSettings, enabled: gboolean);
+    pub fn webkit_settings_set_media_playback_allows_inline(settings: *mut WebKitSettings, allows: gboolean);
+    pub fn webkit_settings_set_enable_media(settings: *mut WebKitSettings, enabled: gboolean);
+    pub fn webkit_settings_set_enable_media_capabilities(settings: *mut WebKitSettings, enabled: gboolean);
+    pub fn webkit_settings_set_media_content_types_requiring_hardware_support(
+        settings: *mut WebKitSettings,
+        content_types: *const gchar,
+    );
+    pub fn webkit_settings_set_disable_web_security(settings: *mut WebKitSettings, disabled: gboolean);
+    pub fn webkit_settings_set_enable_site_specific_quirks(settings: *mut WebKitSettings, enabled: gboolean);
 
     // WebKitUserContentManager
     pub fn webkit_user_content_manager_get_type() -> GType;
@@ -116,4 +128,19 @@ extern "C" {
         block_list: *const *const gchar,
     ) -> *mut WebKitUserScript;
     pub fn webkit_user_script_unref(script: *mut WebKitUserScript);
+
+    // WebKitWebsitePolicies
+    pub fn webkit_website_policies_new_with_policies(
+        first_policy_name: *const gchar,
+        ...
+    ) -> *mut WebKitWebsitePolicies;
 }
+
+#[repr(C)]
+pub struct WebKitWebsitePolicies {
+    _private: [u8; 0],
+}
+
+pub const WEBKIT_AUTOPLAY_ALLOW: u32 = 0;
+pub const WEBKIT_AUTOPLAY_ALLOW_WITHOUT_SOUND: u32 = 1;
+pub const WEBKIT_AUTOPLAY_DENY: u32 = 2;

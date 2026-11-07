@@ -1,7 +1,9 @@
 use crate::app::{App, AppHandle};
+use crate::autoplay::{ADBLOCK_RUNTIME_SCRIPT, AUTOPLAY_RUNTIME_SCRIPT};
 use crate::csd::CSD_RUNTIME_SCRIPT;
 use crate::error::{ByError, Result};
 use crate::ipc::{CommandHandler, IpcMessage, IpcRouter};
+use crate::sdk::MACOS_SDK_RUNTIME_SCRIPT;
 use crate::wayland::{get_wayland_toplevel_proxies, parse_resize_edge, WaylandInputTracker};
 use crate::webview::WebView;
 use by_lite_sys::{
@@ -13,7 +15,17 @@ use by_lite_sys::{
     webkit_settings_set_enable_developer_extras, webkit_settings_set_enable_javascript,
     webkit_settings_set_enable_webgl,
     webkit_settings_set_enable_write_console_messages_to_stdout,
-    webkit_settings_set_javascript_can_access_clipboard, webkit_user_content_manager_add_script,
+    webkit_settings_set_javascript_can_access_clipboard,
+    webkit_settings_set_media_playback_requires_user_gesture,
+    webkit_settings_set_enable_encrypted_media,
+    webkit_settings_set_enable_mediasource,
+    webkit_settings_set_media_playback_allows_inline,
+    webkit_settings_set_enable_media,
+    webkit_settings_set_enable_media_capabilities,
+    webkit_settings_set_media_content_types_requiring_hardware_support,
+    webkit_settings_set_disable_web_security,
+    webkit_settings_set_enable_site_specific_quirks,
+    webkit_user_content_manager_add_script,
     webkit_user_content_manager_new,
     webkit_user_content_manager_register_script_message_handler, webkit_user_script_new,
     webkit_user_script_unref, webkit_web_view_evaluate_javascript,
@@ -23,7 +35,8 @@ use by_lite_sys::{
     wpe_toplevel_set_title, wpe_toplevel_unfullscreen, wpe_toplevel_unmaximize,
     wpe_toplevel_wayland_get_wl_surface, wpe_view_get_toplevel, wpe_view_map,
     GConnectFlags, JSCValue, WebKitUserContentInjectedFrames, WebKitUserContentManager,
-    WebKitUserScriptInjectionTime, WebKitWebView, WPEToplevel, G_TRUE, WL_SURFACE_COMMIT,
+    WebKitUserScriptInjectionTime, WebKitWebView, WPEToplevel, G_TRUE, G_FALSE, WL_SURFACE_COMMIT,
+    webkit_website_policies_new_with_policies, WEBKIT_AUTOPLAY_ALLOW,
     XDG_TOPLEVEL_MOVE, XDG_TOPLEVEL_RESIZE, XDG_TOPLEVEL_SET_APP_ID,
     ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
     ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE, ZXDG_TOPLEVEL_DECORATION_V1_SET_MODE,
@@ -55,6 +68,9 @@ pub struct WindowBuilder {
     resizable: bool,
     devtools: bool,
     csd: bool,
+    sdk: bool,
+    adblock: bool,
+    autoplay_helper: bool,
     url: Option<String>,
     html: Option<String>,
     commands: Vec<(String, CommandHandler)>,
@@ -70,6 +86,9 @@ impl WindowBuilder {
             resizable: true,
             devtools: true,
             csd: true,
+            sdk: true,
+            adblock: false,
+            autoplay_helper: false,
             url: None,
             html: None,
             commands: Vec::new(),
@@ -104,6 +123,21 @@ impl WindowBuilder {
 
     pub fn csd(mut self, csd: bool) -> Self {
         self.csd = csd;
+        self
+    }
+
+    pub fn sdk(mut self, sdk: bool) -> Self {
+        self.sdk = sdk;
+        self
+    }
+
+    pub fn adblock(mut self, enabled: bool) -> Self {
+        self.adblock = enabled;
+        self
+    }
+
+    pub fn autoplay_helper(mut self, enabled: bool) -> Self {
+        self.autoplay_helper = enabled;
         self
     }
 
@@ -144,7 +178,22 @@ impl WindowBuilder {
             webkit_settings_set_allow_file_access_from_file_urls(settings, G_TRUE);
             webkit_settings_set_allow_universal_access_from_file_urls(settings, G_TRUE);
             webkit_settings_set_javascript_can_access_clipboard(settings, G_TRUE);
+            webkit_settings_set_media_playback_requires_user_gesture(settings, G_FALSE);
+            webkit_settings_set_enable_encrypted_media(settings, G_TRUE);
+            webkit_settings_set_enable_mediasource(settings, G_TRUE);
+            webkit_settings_set_media_playback_allows_inline(settings, G_TRUE);
+            if std::env::var_os("BY_NO_MEDIAOVR").is_none() {
+                webkit_settings_set_enable_media(settings, G_TRUE);
+                webkit_settings_set_enable_media_capabilities(settings, G_TRUE);
+                webkit_settings_set_media_content_types_requiring_hardware_support(settings, std::ptr::null());
+            }
+            if std::env::var_os("BY_WEBSEC").is_none() {
+                webkit_settings_set_disable_web_security(settings, G_TRUE);
+            }
+            webkit_settings_set_enable_site_specific_quirks(settings, G_TRUE);
         }
+        let diag_no_adblock = std::env::var_os("BY_NO_ADBLOCK").is_some();
+        let diag_no_autoplay = std::env::var_os("BY_NO_AUTOPLAY").is_some();
 
         // Configure UserContentManager and inject CSD script
         let ucm = unsafe { webkit_user_content_manager_new() };
@@ -166,10 +215,79 @@ impl WindowBuilder {
             }
         }
 
-        // Instantiate WebKitWebView with display, settings, and user content manager
+        // Inject Built-in macOS UI Toolkit SDK into TopFrame at DocumentEnd (when enabled)
+        let diag_no_sdk = std::env::var_os("BY_NO_SDK").is_some();
+        if self.sdk && !diag_no_sdk {
+            let c_sdk = CString::new(MACOS_SDK_RUNTIME_SCRIPT)
+                .map_err(|e| ByError::WindowCreateFailed(e.to_string()))?;
+            let sdk_script = unsafe {
+                webkit_user_script_new(
+                    c_sdk.as_ptr(),
+                    WebKitUserContentInjectedFrames::TopFrame,
+                    WebKitUserScriptInjectionTime::DocumentEnd,
+                    ptr::null(),
+                    ptr::null(),
+                )
+            };
+            unsafe {
+                webkit_user_content_manager_add_script(ucm, sdk_script);
+                webkit_user_script_unref(sdk_script);
+            }
+        }
+
+        // Inject AdBlock & Anti-Popup UserScript into AllFrames at DocumentStart (opt-in per manifest)
+        if self.adblock && !diag_no_adblock {
+            let c_adblock = CString::new(ADBLOCK_RUNTIME_SCRIPT)
+                .map_err(|e| ByError::WindowCreateFailed(e.to_string()))?;
+            let adblock_script = unsafe {
+                webkit_user_script_new(
+                    c_adblock.as_ptr(),
+                    WebKitUserContentInjectedFrames::AllFrames,
+                    WebKitUserScriptInjectionTime::DocumentStart,
+                    ptr::null(),
+                    ptr::null(),
+                )
+            };
+            unsafe {
+                webkit_user_content_manager_add_script(ucm, adblock_script);
+                webkit_user_script_unref(adblock_script);
+            }
+        }
+
+        // Inject 2-step autoplay UserScript into AllFrames at DocumentEnd (opt-in per manifest)
+        if self.autoplay_helper && !AUTOPLAY_RUNTIME_SCRIPT.is_empty() && !diag_no_autoplay {
+            let c_autoplay = CString::new(AUTOPLAY_RUNTIME_SCRIPT)
+                .map_err(|e| ByError::WindowCreateFailed(e.to_string()))?;
+            let autoplay_script = unsafe {
+                webkit_user_script_new(
+                    c_autoplay.as_ptr(),
+                    WebKitUserContentInjectedFrames::AllFrames,
+                    WebKitUserScriptInjectionTime::DocumentEnd,
+                    ptr::null(),
+                    ptr::null(),
+                )
+            };
+            unsafe {
+                webkit_user_content_manager_add_script(ucm, autoplay_script);
+                webkit_user_script_unref(autoplay_script);
+            }
+        }
+
+        // Instantiate WebKitWebsitePolicies permitting unconditional autoplay with sound
+        let prop_autoplay = CString::new("autoplay").unwrap();
+        let website_policies = unsafe {
+            webkit_website_policies_new_with_policies(
+                prop_autoplay.as_ptr(),
+                WEBKIT_AUTOPLAY_ALLOW,
+                ptr::null::<std::ffi::c_void>(),
+            )
+        };
+
+        // Instantiate WebKitWebView with display, settings, user content manager, and website policies
         let prop_display = CString::new("display").unwrap();
         let prop_settings = CString::new("settings").unwrap();
         let prop_ucm = CString::new("user-content-manager").unwrap();
+        let prop_policies = CString::new("website-policies").unwrap();
 
         let web_view_ptr = unsafe {
             g_object_new(
@@ -180,6 +298,8 @@ impl WindowBuilder {
                 settings,
                 prop_ucm.as_ptr(),
                 ucm,
+                prop_policies.as_ptr(),
+                website_policies,
                 ptr::null::<std::ffi::c_void>(),
             )
         } as *mut WebKitWebView;
