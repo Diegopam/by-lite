@@ -38,11 +38,14 @@ fi
 if [ -z "$BUNDLE_FILE" ]; then
     echo "[by-lite] Baixando a versao mais recente do runtime portatil no GitHub..."
     LATEST_URL="https://github.com/${REPO}/releases/latest/download/by-lite-portable-linux-x86_64.tar.gz"
+    TAG_URL="https://github.com/${REPO}/releases/download/v0.2.0/by-lite-portable-linux-x86_64.tar.gz"
 
     if command -v curl >/dev/null 2>&1; then
-        curl -fsSL "$LATEST_URL" -o "$TMP_DIR/bundle.tar.gz" || true
+        curl -fsSL "$LATEST_URL" -o "$TMP_DIR/bundle.tar.gz" 2>/dev/null || \
+        curl -fsSL "$TAG_URL" -o "$TMP_DIR/bundle.tar.gz" 2>/dev/null || true
     elif command -v wget >/dev/null 2>&1; then
-        wget -q "$LATEST_URL" -O "$TMP_DIR/bundle.tar.gz" || true
+        wget -q "$LATEST_URL" -O "$TMP_DIR/bundle.tar.gz" 2>/dev/null || \
+        wget -q "$TAG_URL" -O "$TMP_DIR/bundle.tar.gz" 2>/dev/null || true
     fi
 
     if [ ! -f "$TMP_DIR/bundle.tar.gz" ] || [ ! -s "$TMP_DIR/bundle.tar.gz" ]; then

@@ -57,6 +57,11 @@ RUN sed -i 's/Components: main/Components: main universe/' /etc/apt/sources.list
         libfreetype6-dev \
         shared-mime-info \
         desktop-file-utils \
+        libgcrypt20-dev \
+        libgpg-error-dev \
+        unifdef \
+        libinput-dev \
+        libudev-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust toolchain
@@ -65,8 +70,8 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Isolated build prefix
 ENV PREFIX="/opt/by-lite-runtime"
-ENV PKG_CONFIG_PATH="${PREFIX}/lib/x86_64-linux-gnu/pkgconfig:${PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
-ENV LD_LIBRARY_PATH="${PREFIX}/lib/x86_64-linux-gnu:${PREFIX}/lib:${LD_LIBRARY_PATH}"
+ENV PKG_CONFIG_PATH="${PREFIX}/lib/x86_64-linux-gnu/pkgconfig:${PREFIX}/lib/pkgconfig"
+ENV LD_LIBRARY_PATH="${PREFIX}/lib/x86_64-linux-gnu:${PREFIX}/lib"
 
 # 1. Build and install libwpe
 WORKDIR /build
@@ -88,7 +93,21 @@ RUN curl -fsSL https://wpewebkit.org/releases/wpewebkit-2.46.5.tar.xz | tar -xJ 
         -DPORT=WPE \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-        -DUSE_SOUP2=OFF \
+        -DENABLE_WPE_PLATFORM=ON \
+        -DENABLE_WPE_PLATFORM_WAYLAND=ON \
+        -DENABLE_WPE_PLATFORM_DRM=ON \
+        -DENABLE_WPE_PLATFORM_HEADLESS=ON \
+        -DUSE_ATK=OFF \
+        -DUSE_JPEGXL=OFF \
+        -DUSE_WOFF2=OFF \
+        -DUSE_AVIF=OFF \
+        -DUSE_LCMS=OFF \
+        -DENABLE_JOURNALD_LOG=OFF \
+        -DUSE_LIBBACKTRACE=OFF \
+        -DENABLE_BUBBLEWRAP_SANDBOX=OFF \
+        -DENABLE_MEDIA_RECORDER=OFF \
+        -DUSE_GSTREAMER_TRANSCODER=OFF \
+        -DUSE_GSTREAMER_MPEGTS=OFF \
         -DENABLE_MINIBROWSER=OFF \
         -DENABLE_DOCUMENTATION=OFF \
         -DENABLE_INTROSPECTION=OFF \
@@ -109,10 +128,11 @@ RUN RUSTFLAGS="-C link-args=-Wl,-rpath,\$ORIGIN/../lib" \
 WORKDIR /dist
 RUN mkdir -p by-lite-portable/bin by-lite-portable/lib by-lite-portable/libexec && \
     cp /src/target/release/by-lite by-lite-portable/bin/by-lite-bin && \
-    cp -d ${PREFIX}/lib/libWPEWebKit* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libWPEWebKit* by-lite-portable/lib/ && \
-    cp -d ${PREFIX}/lib/libwpe* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libwpe* by-lite-portable/lib/ && \
-    cp -d ${PREFIX}/lib/libWPEBackend* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libWPEBackend* by-lite-portable/lib/ && \
-    cp -r ${PREFIX}/libexec/* by-lite-portable/libexec/
+    cp -d ${PREFIX}/lib/libWPEWebKit* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libWPEWebKit* by-lite-portable/lib/ 2>/dev/null || true && \
+    cp -d ${PREFIX}/lib/libWPEPlatform* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libWPEPlatform* by-lite-portable/lib/ 2>/dev/null || true && \
+    cp -d ${PREFIX}/lib/libwpe* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libwpe* by-lite-portable/lib/ 2>/dev/null || true && \
+    cp -d ${PREFIX}/lib/libWPEBackend* by-lite-portable/lib/ 2>/dev/null || cp -d ${PREFIX}/lib/x86_64-linux-gnu/libWPEBackend* by-lite-portable/lib/ 2>/dev/null || true && \
+    cp -r ${PREFIX}/libexec/* by-lite-portable/libexec/ 2>/dev/null || cp -r ${PREFIX}/lib/x86_64-linux-gnu/wpe-webkit-2.0 by-lite-portable/libexec/ 2>/dev/null || true
 
 # Universal launcher wrapper script
 RUN echo '#!/usr/bin/env bash' > by-lite-portable/by-lite && \
