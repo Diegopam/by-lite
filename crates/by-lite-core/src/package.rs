@@ -30,6 +30,37 @@ pub enum BackendSpec {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum DependencySpec {
+    Simple(String),
+    Detailed {
+        command: String,
+        #[serde(default)]
+        description: Option<String>,
+        #[serde(default)]
+        package: Option<String>,
+    },
+}
+
+impl DependencySpec {
+    pub fn command(&self) -> &str {
+        match self {
+            DependencySpec::Simple(cmd) => cmd.as_str(),
+            DependencySpec::Detailed { command, .. } => command.as_str(),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        match self {
+            DependencySpec::Simple(cmd) => format!("Comando do sistema ({})", cmd),
+            DependencySpec::Detailed { command, description, .. } => {
+                description.clone().unwrap_or_else(|| format!("Comando do sistema ({})", command))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ByManifest {
     pub name: String,
     #[serde(default = "default_title")]
@@ -66,6 +97,8 @@ pub struct ByManifest {
     pub autoplay_helper: bool,
     #[serde(default = "default_true")]
     pub sdk: bool,
+    #[serde(default)]
+    pub dependencies: Vec<DependencySpec>,
 }
 
 fn default_title() -> String {
@@ -155,6 +188,7 @@ impl ByManifest {
             adblock: false,
             autoplay_helper: false,
             sdk: true,
+            dependencies: Vec::new(),
         }
     }
 

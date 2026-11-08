@@ -347,6 +347,14 @@ fn run_app_instance(
     devtools_override: bool,
     csd_override: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    // Check and ensure required system dependencies declared in by-lite.json
+    if !manifest.dependencies.is_empty() {
+        if let Err(err) = by_lite_core::dependencies::ensure_dependencies(&manifest.title, &manifest.dependencies) {
+            eprintln!("[by-lite] {}", err);
+            return Err(err.into());
+        }
+    }
+
     // Check if application requires embedded network tunnel (e.g. Cloudflare WARP) or proxy
     if manifest.tunnel.as_deref() == Some("warp") || manifest.proxy.is_some() {
         println!("[by-lite] 🛡️ Ativando túnel de rede embutido (Cloudflare WARP)...");
