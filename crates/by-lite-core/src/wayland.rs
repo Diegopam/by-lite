@@ -245,11 +245,31 @@ pub unsafe fn get_wayland_toplevel_proxies(
     // offset 0x00: struct wl_surface* wlSurface
     // offset 0x08: struct xdg_surface* xdgSurface
     // offset 0x10: struct xdg_toplevel* xdgToplevel
-    // Note: WPEPlatform 2.46 does not manage zxdg_toplevel_decoration_v1 (offset 0x18 is dmabufFeedback)
+    // offset 0x18: struct zxdg_toplevel_decoration_v1* xdgToplevelDecoration
+    //              (only when WPE is built with USE(XDG_DECORATION_UNSTABLE_V1);
+    //              otherwise this slot holds dmabufFeedback, another wl_proxy or NULL)
     let ptrs = priv_ptr as *const *mut wl_proxy;
     let wl_surface = *ptrs.add(0);
     let xdg_toplevel = *ptrs.add(2);
-    let xdg_decoration = std::ptr::null_mut();
+    let candidate = *ptrs.add(3);
+
+    // Validate the slot by its Wayland interface name instead of trusting the offset blindly.
+    let xdg_decoration = if !candidate.is_null()
+        && proxy_class_is(candidate, "zxdg_toplevel_decoration_v1")
+    {
+        candidate
+    } else {
+        std::ptr::null_mut()
+    };
 
     Some((wl_surface, xdg_toplevel, xdg_decoration))
+}
+
+/// Check whether a wl_proxy belongs to the given Wayland interface
+unsafe fn proxy_class_is(proxy: *mut wl_proxy, name: &str) -> bool {
+    let cls = wl_proxy_get_class(proxy);
+    if cls.is_null() {
+        return false;
+    }
+    CStr::from_ptr(cls).to_bytes() == name.as_bytes()
 }

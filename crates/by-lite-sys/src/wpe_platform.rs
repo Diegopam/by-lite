@@ -139,6 +139,7 @@ extern "C" {
         ...
     ) -> *mut wl_proxy;
     pub fn wl_proxy_get_version(proxy: *mut wl_proxy) -> u32;
+    pub fn wl_proxy_get_class(proxy: *mut wl_proxy) -> *const gchar;
     pub fn wl_proxy_add_listener(
         proxy: *mut wl_proxy,
         implementation: *const Option<unsafe extern "C" fn()>,
