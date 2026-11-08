@@ -95,8 +95,10 @@ pub struct ByManifest {
     pub adblock: bool,
     #[serde(default)]
     pub autoplay_helper: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub sdk: bool,
+    #[serde(default)]
+    pub mime_types: Option<String>,
     #[serde(default)]
     pub dependencies: Vec<DependencySpec>,
 }
@@ -188,6 +190,7 @@ impl ByManifest {
             adblock: false,
             autoplay_helper: false,
             sdk: true,
+            mime_types: None,
             dependencies: Vec::new(),
         }
     }
@@ -243,6 +246,21 @@ impl ByManifest {
             }
         }
         format!("{} — aplicativo desktop by-lite", self.title)
+    }
+
+    /// Resolve MIME types for FreeDesktop .desktop generation
+    pub fn resolve_mime_types(&self) -> String {
+        if let Some(ref m) = self.mime_types {
+            if !m.trim().is_empty() {
+                let trimmed = m.trim();
+                if trimmed.ends_with(';') {
+                    return trimmed.to_string();
+                } else {
+                    return format!("{};", trimmed);
+                }
+            }
+        }
+        "application/x-by-lite;".to_string()
     }
 }
 

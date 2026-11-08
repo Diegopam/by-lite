@@ -70,6 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut command: Option<String> = None;
     let mut target: Option<String> = None;
+    let mut extra_args: Vec<String> = Vec::new();
     let mut output_pkg: Option<String> = None;
     let mut title_override: Option<String> = None;
     let mut app_id: Option<String> = None;
@@ -157,6 +158,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             arg if !arg.starts_with('-') => {
                 if target.is_none() {
                     target = Some(arg.to_string());
+                } else {
+                    extra_args.push(arg.to_string());
                 }
             }
             _ => {}
@@ -225,6 +228,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     height_override,
                     devtools,
                     csd,
+                    &extra_args,
                 )
             } else {
                 run_welcome_page()
@@ -241,6 +245,7 @@ fn run_target(
     height_override: Option<u32>,
     devtools: bool,
     csd: bool,
+    extra_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Strip file:// prefix if passed by desktop launcher
     let clean_target = if let Some(stripped) = target_str.strip_prefix("file://") {
@@ -261,6 +266,7 @@ fn run_target(
             height_override,
             devtools,
             csd,
+            extra_args,
         );
     }
 
@@ -280,6 +286,7 @@ fn run_target(
             height_override,
             devtools,
             csd,
+            extra_args,
         );
     }
 
@@ -302,7 +309,7 @@ fn run_target(
         builder = builder.app_id(id);
     }
 
-    builder = register_default_commands(builder);
+    builder = register_default_commands(builder, extra_args);
     let _window = builder.build(&app)?;
     app.run()?;
 
@@ -317,6 +324,7 @@ fn run_byt_package(
     height_override: Option<u32>,
     devtools_override: bool,
     csd_override: bool,
+    extra_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("[by-lite] Descompactando pacote de aplicativo .byt: {:?}", byt_path);
     let (app_dir, manifest) = package::unpack(byt_path, None)?;
@@ -334,6 +342,7 @@ fn run_byt_package(
         height_override,
         devtools_override,
         csd_override,
+        extra_args,
     )
 }
 
@@ -346,6 +355,7 @@ fn run_app_instance(
     height_override: Option<u32>,
     devtools_override: bool,
     csd_override: bool,
+    extra_args: &[String],
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Check and ensure required system dependencies declared in by-lite.json
     if !manifest.dependencies.is_empty() {
@@ -355,9 +365,21 @@ fn run_app_instance(
         }
     }
 
+    // Set environment variables for extra arguments
+    if let Some(first_file) = extra_args.first() {
+        let clean_file = first_file.strip_prefix("file://").unwrap_or(first_file);
+        std::env::set_var("BY_LITE_FILE", clean_file);
+    } else {
+        std::env::remove_var("BY_LITE_FILE");
+    }
+    std::env::set_var(
+        "BY_LITE_ARGS",
+        serde_json::to_string(extra_args).unwrap_or_default(),
+    );
+
     // Check if application requires embedded network tunnel (e.g. Cloudflare WARP) or proxy
     if manifest.tunnel.as_deref() == Some("warp") || manifest.proxy.is_some() {
-        println!("[by-lite] 🛡️ Ativando túnel de rede embutido (Cloudflare WARP)...");
+        println!("[by-lite] Ativando tunel de rede embutido (Cloudflare WARP)...");
         let warp_cmd = if app_dir.join("bin/by-lite-warp").exists() {
             app_dir.join("bin/by-lite-warp")
         } else {
@@ -376,7 +398,7 @@ fn run_app_instance(
         std::env::set_var("ALL_PROXY", "socks5://127.0.0.1:40000");
         std::env::set_var("no_proxy", "localhost,127.0.0.1,::1");
         std::env::set_var("NO_PROXY", "localhost,127.0.0.1,::1");
-        println!("[by-lite] 🌐 Tráfego do aplicativo encapsulado com sucesso via {}", proxy_target);
+        println!("[by-lite] Trafego do aplicativo encapsulado com sucesso via {}", proxy_target);
     }
 
     // Check and start optional backend process
@@ -394,6 +416,7 @@ fn run_app_instance(
                 println!("[by-lite] Iniciando servidor backend: {:?}", bin_path);
                 let mut cmd = Command::new(&bin_path);
                 cmd.args(&backend.args);
+                cmd.args(extra_args);
                 cmd.current_dir(&app_dir);
 
                 match cmd.spawn() {
@@ -476,7 +499,7 @@ fn run_app_instance(
         .autoplay_helper(autoplay_helper)
         .url(url);
 
-    builder = register_default_commands(builder);
+    builder = register_default_commands(builder, extra_args);
     let _window = builder.build(&app)?;
 
     println!("[by-lite] Janela aberta com sucesso. Executando aplicativo...");
@@ -497,7 +520,11 @@ fn is_tar_gz(path: &Path) -> bool {
     false
 }
 
-fn register_default_commands(builder: WindowBuilder) -> WindowBuilder {
+fn register_default_commands(builder: WindowBuilder, extra_args: &[String]) -> WindowBuilder {
+    let args_json = serde_json::json!(extra_args);
+    let args_cmd = args_json.clone();
+    let args_miniui = args_json.clone();
+
     builder
         .command("system_info", |_| {
             Ok(serde_json::json!({
@@ -509,7 +536,10 @@ fn register_default_commands(builder: WindowBuilder) -> WindowBuilder {
                 "sdk": "macOS UI Toolkit v1.0.0",
             }))
         })
-        .command("miniui.protocol", |args| {
+        .command("app_args", move |_| {
+            Ok(args_cmd.clone())
+        })
+        .command("miniui.protocol", move |args| {
             let payload_str = args
                 .as_ref()
                 .and_then(|v| v.get("payload"))
@@ -565,6 +595,12 @@ fn register_default_commands(builder: WindowBuilder) -> WindowBuilder {
                         "engine": "WPE WebKit 2.0",
                         "pid": std::process::id()
                     }
+                })),
+                "app.getArgs" | "runtime.getArgs" => Ok(serde_json::json!({
+                    "v": v,
+                    "id": id,
+                    "ok": true,
+                    "result": args_miniui
                 })),
                 "system.getTheme" => Ok(serde_json::json!({
                     "v": v,
@@ -791,11 +827,13 @@ pub fn integrate_byt(target_str: &str) -> Result<(), Box<dyn std::error::Error>>
 
         let _ = fs::copy(&icon_path, &dest_icon_hicolor);
         let _ = fs::copy(&icon_path, &dest_icon_local);
-        println!("[by-lite integrate] 🎨 Ícone instalado em: {:?}", dest_icon_hicolor);
+        println!("[by-lite integrate] Icone instalado em: {:?}", dest_icon_hicolor);
         final_icon_spec = dest_icon_local.to_string_lossy().to_string();
     } else {
-        println!("[by-lite integrate] ℹ️ Nenhum ícone customizado encontrado. Usando tema padrão.");
+        println!("[by-lite integrate] Nenhum icone customizado encontrado. Usando tema padrao.");
     }
+
+    let mime_types = manifest.resolve_mime_types();
 
     // Gerar lançador FreeDesktop .desktop
     let desktop_content = format!(
@@ -810,8 +848,8 @@ Icon={icon}
 Terminal=false
 StartupWMClass={app_id}
 Categories={categories}
-MimeType=application/x-by-lite;
-Keywords=by-lite;streaming;tv;video;player;
+MimeType={mime_types}
+Keywords=by-lite;app;
 "#,
         title = title,
         app_id = app_id,
@@ -819,18 +857,19 @@ Keywords=by-lite;streaming;tv;video;player;
         exec_path = abs_path.display(),
         icon = final_icon_spec,
         categories = categories,
+        mime_types = mime_types,
     );
 
     let desktop_file = apps_dir.join(format!("{}.desktop", app_id));
     fs::write(&desktop_file, desktop_content)?;
-    println!("[by-lite integrate] 📌 Lançador Desktop gerado: {:?}", desktop_file);
+    println!("[by-lite integrate] Lancador Desktop gerado: {:?}", desktop_file);
 
     // Atualizar caches dos ambientes desktop
     let _ = Command::new("update-desktop-database").arg(&apps_dir).status();
     let _ = Command::new("kbuildsycoca6").status();
     let _ = Command::new("kbuildsycoca5").status();
 
-    println!("[by-lite] ✅ Aplicativo '{}' integrado com sucesso no menu do sistema!", title);
+    println!("[by-lite] Aplicativo '{}' integrado com sucesso no menu do sistema!", title);
     Ok(())
 }
 
@@ -853,9 +892,9 @@ pub fn unintegrate_byt(target_str: &str) -> Result<(), Box<dyn std::error::Error
     let desktop_file = apps_dir.join(format!("{}.desktop", stem));
     if desktop_file.exists() {
         let _ = fs::remove_file(&desktop_file);
-        println!("[by-lite unintegrate] 🗑️ Lançador removido: {:?}", desktop_file);
+        println!("[by-lite unintegrate] Lancador removido: {:?}", desktop_file);
     } else {
-        println!("[by-lite unintegrate] ⚠️ Lançador não encontrado para: {}", stem);
+        println!("[by-lite unintegrate] Lancador nao encontrado para: {}", stem);
     }
 
     let icon_file = data_home.join("icons/hicolor/256x256/apps").join(format!("{}.png", stem));
@@ -871,7 +910,7 @@ pub fn unintegrate_byt(target_str: &str) -> Result<(), Box<dyn std::error::Error
     let _ = Command::new("kbuildsycoca6").status();
     let _ = Command::new("kbuildsycoca5").status();
 
-    println!("[by-lite] 🧹 Aplicativo '{}' removido do menu do sistema.", stem);
+    println!("[by-lite] Aplicativo '{}' removido do menu do sistema.", stem);
     Ok(())
 }
 
@@ -881,7 +920,7 @@ pub fn integrate_all_byt(dir_str: &str) -> Result<(), Box<dyn std::error::Error>
         return Err(format!("Diretório inválido ou inexistente: {:?}", path).into());
     }
 
-    println!("[by-lite] 🔍 Escaneando diretório por pacotes .byt: {:?}", path);
+    println!("[by-lite] Escaneando diretorio por pacotes .byt: {:?}", path);
     let mut count = 0;
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -895,7 +934,7 @@ pub fn integrate_all_byt(dir_str: &str) -> Result<(), Box<dyn std::error::Error>
             }
         }
     }
-    println!("\n[by-lite] 🎉 Total de {} aplicativo(s) .byt integrados com sucesso no menu!", count);
+    println!("\n[by-lite] Total de {} aplicativo(s) .byt integrados com sucesso no menu!", count);
     Ok(())
 }
 
@@ -906,7 +945,7 @@ pub fn list_integrated_apps() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| PathBuf::from(&home).join(".local/share"));
     let apps_dir = data_home.join("applications");
 
-    println!("[by-lite] 📋 Aplicativos .byt integrados em {:?}:\n", apps_dir);
+    println!("[by-lite] Aplicativos .byt integrados em {:?}:\n", apps_dir);
     let mut count = 0;
     if apps_dir.is_dir() {
         for entry in fs::read_dir(&apps_dir)? {
@@ -953,7 +992,7 @@ fn run_welcome_page() -> Result<(), Box<dyn std::error::Error>> {
         .csd(true)
         .html(get_welcome_page_html());
 
-    builder = register_default_commands(builder);
+    builder = register_default_commands(builder, &[]);
     let _window = builder.build(&app)?;
     app.run()?;
     Ok(())
