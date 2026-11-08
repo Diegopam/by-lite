@@ -245,11 +245,11 @@ pub unsafe fn get_wayland_toplevel_proxies(
     // offset 0x00: struct wl_surface* wlSurface
     // offset 0x08: struct xdg_surface* xdgSurface
     // offset 0x10: struct xdg_toplevel* xdgToplevel
-    // offset 0x18: struct zxdg_toplevel_decoration_v1* xdgToplevelDecoration
+    // Note: WPEPlatform 2.46 does not manage zxdg_toplevel_decoration_v1 (offset 0x18 is dmabufFeedback)
     let ptrs = priv_ptr as *const *mut wl_proxy;
     let wl_surface = *ptrs.add(0);
     let xdg_toplevel = *ptrs.add(2);
-    let xdg_decoration = *ptrs.add(3);
+    let xdg_decoration = std::ptr::null_mut();
 
     Some((wl_surface, xdg_toplevel, xdg_decoration))
 }

@@ -794,7 +794,7 @@ fn eval_js(web_view: *mut WebKitWebView, js: &str) {
 
 /// Configure Wayland CSD and app_id directly via underlying Wayland proxy objects
 pub unsafe fn configure_wayland_csd(toplevel: *mut WPEToplevel, app_id: &str, client_side: bool) {
-    let Some((wl_surface, xdg_toplevel, xdg_decoration)) = get_wayland_toplevel_proxies(toplevel) else {
+    let Some((_wl_surface, xdg_toplevel, xdg_decoration)) = get_wayland_toplevel_proxies(toplevel) else {
         return;
     };
 
@@ -805,7 +805,7 @@ pub unsafe fn configure_wayland_csd(toplevel: *mut WPEToplevel, app_id: &str, cl
         }
     }
 
-    // Explicitly toggle decoration mode on zxdg_toplevel_decoration_v1 (opcode 1: set_mode)
+    // Explicitly toggle decoration mode on zxdg_toplevel_decoration_v1 (opcode 1: set_mode) if available
     if !xdg_decoration.is_null() {
         let mode = if client_side {
             ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE
@@ -817,10 +817,5 @@ pub unsafe fn configure_wayland_csd(toplevel: *mut WPEToplevel, app_id: &str, cl
             ZXDG_TOPLEVEL_DECORATION_V1_SET_MODE,
             mode,
         );
-    }
-
-    // Commit changes to wl_surface (opcode 6: wl_surface.commit)
-    if !wl_surface.is_null() {
-        wl_proxy_marshal(wl_surface, WL_SURFACE_COMMIT);
     }
 }
